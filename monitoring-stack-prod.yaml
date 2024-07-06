@@ -1,0 +1,316 @@
+version: "3.8"
+services:
+  grafana:
+    container_name: monitoring-grafana
+    image: grafana/grafana:latest
+    hostname: rpi-grafana
+    restart: unless-stopped
+    user: "472"
+    networks:
+      - internal
+    ports:
+      - 3000:3000
+    env_file:
+      - grafana_stack.env
+    volumes:
+      - /docker/grafana/data:/var/lib/grafana
+      - /docker/grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+    deploy:
+      resources:
+        limits:
+          memory: 400M
+        reservations:
+          memory: 200M
+    healthcheck:
+      test: curl --fail -s http://localhost:3000 || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+  cadvisor:
+    container_name: monitoring-cadvisor
+    image: gcr.io/cadvisor/cadvisor:v0.47.1
+    hostname: rpi-cadvisor
+    restart: unless-stopped
+    privileged: true
+    networks:
+      - internal
+    expose:
+      - 8080
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+      - /etc/machine-id:/etc/machine-id:ro
+    deploy:
+      resources:
+        limits:
+          memory: 300M
+        reservations:
+          memory: 200M
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+  node-exporter:
+    container_name: monitoring-node-exporter
+    image: prom/node-exporter:latest
+    hostname: rpi-exporter
+    restart: unless-stopped
+    networks:
+      - internal
+    expose:
+      - 9100
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/host
+      - --collector.filesystem.ignored-mount-points
+      - ^/(sys|proc|dev|host|etc|rootfs/var/lib/docker/containers|rootfs/var/lib/docker/overlay2|rootfs/run/docker/netns|rootfs/var/lib/docker/aufs)($$|/)
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+      - /:/host:ro,rslave
+    deploy:
+      resources:
+        limits:
+          memory: 100M
+        reservations:
+          memory: 50M
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - --spider
+        - http://localhost:9100
+      interval: 1m
+      timeout: 1s
+      retries: 3
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+  prometheus:
+    container_name: monitoring-prometheus
+    image: prom/prometheus:latest
+    hostname: rpi-prometheus
+    restart: unless-stopped
+    user: nobody
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+    ports:
+      - 9090:9090
+    networks:
+      - internal
+    expose:
+      - 9090
+    volumes:
+      - /docker/prometheus/data:/prometheus
+      - /docker/prometheus:/etc/prometheus/
+    depends_on:
+      - cadvisor
+      - node-exporter
+    links:
+      - cadvisor:cadvisor
+      - node-exporter:node-exporter
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - --spider
+        - http://localhost:9090
+      interval: 1m
+      timeout: 1s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+        reservations:
+          memory: 512M
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+  uptime-kuma:
+    container_name: monitoring-uptime-kuma
+    hostname: rpi-uptime-kuma
+    restart: unless-stopped
+    image: louislam/uptime-kuma:1
+    volumes:
+      - /docker/uptime-kuma/data:/app/data
+    networks:
+      - internal
+    ports:
+      - 3001:3001
+    expose:
+      - 3001
+    deploy:
+      resources:
+        limits:
+          memory: 400M
+        reservations:
+          memory: 200M
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+  dockcheck-web:
+    container_name: monitoring-dockcheck-web
+    image: palleri/dockcheck-web:latest
+    restart: unless-stopped
+    networks:
+      - internal
+    ports:
+      - 3002:80
+    expose:
+      - 3002
+    volumes:
+      - /docker/dockcheck-web/config:/var/www/html
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /etc/localtime:/etc/localtime:ro
+    healthcheck:
+      test: curl --fail -s http://localhost:80 || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 200M
+        reservations:
+          memory: 100M
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: monitoring-dozzle
+    expose:
+      - 3003
+    ports:
+      - 3003:8080/tcp
+    networks:
+      - internal
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test:
+        - CMD
+        - /dozzle
+        - healthcheck
+      interval: 3s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 500M
+        reservations:
+          memory: 250M
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+  watchtower:
+    image: containrrr/watchtower
+    container_name: monitoring-watchtower
+    ports:
+      - 8060:8080
+    expose:
+      - 8060
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      WATCHTOWER_HTTP_API_TOKEN: bearer-token
+      WATCHTOWER_POLL_INTERVAL: "3600" # Check for updates every hour
+      WATCHTOWER_HTTP_API_METRICS: true
+      WATCHTOWER_CLEANUP: true
+      WATCHTOWER_DEBUG: true
+      WATCHTOWER_LABEL_ENABLE: true
+      TZ: Europe/London
+    networks:
+      - internal
+    deploy:
+      resources:
+        limits:
+          memory: 50M
+        reservations:
+          memory: 25M
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+  speedtest-tracker:
+    container_name: monitoring-speedtest-tracker
+    networks:
+      - internal
+    ports:
+      - 8080:80
+    expose:
+      - 8080
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - APP_KEY= #app key
+      - DB_CONNECTION=mysql
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_DATABASE=speedtest_tracker
+      - DB_USERNAME=speedy
+      - DB_PASSWORD=password
+    volumes:
+      - /docker/speedtest-tracker/config:/config
+      - /docker/speedtest-tracker/web:/etc/ssl/web
+    image: lscr.io/linuxserver/speedtest-tracker:latest
+    restart: unless-stopped
+    depends_on:
+      - db
+    healthcheck:
+      test: curl -fSs http://localhost:80/api/healthcheck || exit 1
+      interval: 10s
+      retries: 3
+      start_period: 30s
+      timeout: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 500M
+        reservations:
+          memory: 250M
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+  db:
+    image: mariadb:10
+    container_name: monitoring-speedtest-tracker-db
+    networks:
+      - internal
+    restart: always
+    environment:
+      - MARIADB_DATABASE=speedtest_tracker
+      - MARIADB_USER=speedy
+      - MARIADB_PASSWORD=password
+      - MARIADB_RANDOM_ROOT_PASSWORD=true
+    volumes:
+      - speedtest-db:/var/lib/mysql
+    healthcheck:
+      interval: 30s
+      retries: 3
+      test:
+        - CMD
+        - healthcheck.sh
+        - --su-mysql
+        - --connect
+        - --innodb_initialized
+      timeout: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 300M
+        reservations:
+          memory: 150M
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+volumes:
+  speedtest-db: null
+networks:
+  internal:
+    driver: bridge

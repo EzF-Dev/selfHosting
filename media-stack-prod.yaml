@@ -1,0 +1,256 @@
+version: "3.8"
+services:
+  plex:
+    image: lscr.io/linuxserver/plex:latest
+    container_name: media-plex
+    network_mode: media-stack-prod
+    ports:
+      - 32400:32400
+      - 1900:1900/udp
+      - 8324:8324
+      - 32410:32410/udp
+      - 32412:32412/udp
+      - 32413:32413/udp
+      - 32414:32414/udp
+      - 32469:32469
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/London
+      - VERSION=docker
+      - PLEX_CLAIM=claim-sfiGRWNG9F8kyMHGS8xt
+    volumes:
+      - /docker/plex/config:/config
+      - /srv/dev-disk-by-uuid-D6E6E4A3E6E484D9/media/tv:/tv
+      - /srv/dev-disk-by-uuid-D6E6E4A3E6E484D9/media/movies:/movies
+      - /srv/dev-disk-by-uuid-D6E6E4A3E6E484D9/media/music:/music
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2048M
+        reservations:
+          memory: 1024M
+    healthcheck:
+      test: curl --fail -s http://localhost:32400/web/index.html || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+  expressvpn:
+    image: misioslav/expressvpn:latest-armhf-bullseye
+    container_name: media-expressvpn
+    restart: unless-stopped
+    network_mode: media-stack-prod
+    ports:
+      - 80:80 # expressvpn
+      - 9091:9091 # transmission
+      - 51413:51413 # transmission
+      - 51413:51413/udp # transmission
+      - 8989:8989 # radarr
+      - 7878:7878 # sonarr
+      - 9696:9696 # prowlarr
+      - 5055:5055 # overseer
+      - 8191:8191/tcp # flaresolverr listening port for selenium
+    environment:
+      - WHITELIST_DNS=192.168.1.1,1.1.1.1,8.8.8.8
+      - CODE= # ExpressVPN Key
+      - SERVER=smart
+      - NETWORK=on
+      - PROTOCOL=lightway_udp
+      - CIPHER=chacha20
+      - BEARER= # IpInfo Key
+      - IP=86.151.188.137
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    stdin_open: true
+    tty: true
+    command: /bin/bash
+    privileged: true
+    deploy:
+      resources:
+        limits:
+          memory: 200M
+        reservations:
+          memory: 100M
+  flaresolverr:
+    image: flaresolverr/flaresolverr:latest
+    network_mode: service:expressvpn
+    container_name: media-flaresolverr
+    environment:
+      - LOG_LEVEL=info
+      - LOG_HTML=false
+      - CAPTCHA_SOLVER=none
+      - TZ=Europe/London
+    depends_on:
+      expressvpn:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 700M
+        reservations:
+          memory: 350M
+    healthcheck:
+      test: curl --fail -s http://localhost:8191/ || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+  prowlarr:
+    image: linuxserver/prowlarr:latest
+    network_mode: service:expressvpn
+    container_name: media-prowlarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/London
+    volumes:
+      - /docker/prowlarr/config:/config
+    restart: unless-stopped
+    depends_on:
+      expressvpn:
+        condition: service_healthy
+    healthcheck:
+      test: curl --fail -s http://localhost:9696/ || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 500M
+        reservations:
+          memory: 250M
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+  sonarr:
+    container_name: media-sonarr
+    image: linuxserver/sonarr:arm64v8-latest
+    restart: unless-stopped
+    network_mode: service:expressvpn
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/London
+    volumes:
+      - /docker/sonarr/config:/config
+      - /srv/dev-disk-by-uuid-D6E6E4A3E6E484D9/media/tv:/tv
+      - /srv/dev-disk-by-uuid-D6E6E4A3E6E484D9/DOCKER/transmission/downloads:/downloads
+    depends_on:
+      prowlarr:
+        condition: service_healthy
+    healthcheck:
+      test: curl --fail -s http://localhost:8989/ || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 500M
+        reservations:
+          memory: 250M
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+  radarr:
+    container_name: media-radarr
+    image: linuxserver/radarr:latest
+    restart: unless-stopped
+    network_mode: service:expressvpn
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/London
+    volumes:
+      - /docker/radarr/config:/config
+      - /srv/dev-disk-by-uuid-D6E6E4A3E6E484D9/media/movies:/movies
+      - /srv/dev-disk-by-uuid-D6E6E4A3E6E484D9/DOCKER/transmission/downloads:/downloads
+    depends_on:
+      prowlarr:
+        condition: service_healthy
+    healthcheck:
+      test: curl --fail -s http://localhost:7878/ || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 500M
+        reservations:
+          memory: 250M
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+  overseer:
+    container_name: media-overseer
+    image: sctx/overseerr:latest
+    restart: unless-stopped
+    network_mode: service:expressvpn
+    environment:
+      - LOG_LEVEL=debug
+      - TZ=Europe/London
+    volumes:
+      - /docker/overseer/app/config:/app/config
+    depends_on:
+      sonarr:
+        condition: service_healthy
+      radarr:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - nc
+        - -vz
+        - -w1
+        - localhost
+        - "5055"
+      interval: 1s
+      timeout: 1s
+      retries: 30
+    deploy:
+      resources:
+        limits:
+          memory: 500M
+        reservations:
+          memory: 250M
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+  transmission:
+    image: linuxserver/transmission:latest
+    container_name: media-transmission
+    network_mode: service:expressvpn
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/London
+    volumes:
+      - /docker/transmission/config:/config
+      - /srv/dev-disk-by-uuid-D6E6E4A3E6E484D9/DOCKER/transmission/downloads:/downloads
+      - /srv/dev-disk-by-uuid-D6E6E4A3E6E484D9/DOCKER/transmission/watch:/watch
+    restart: unless-stopped
+    depends_on:
+      expressvpn:
+        condition: service_healthy
+    healthcheck:
+      test: curl --fail -s http://localhost:9091/transmission/web/ || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 500M
+        reservations:
+          memory: 250M
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+networks: {}

@@ -1,0 +1,59 @@
+version: "3.8"
+services:
+  it-tools:
+    container_name: tooling-it-tools
+    restart: unless-stopped
+    ports:
+      - 8090:80
+    image: corentinth/it-tools:latest
+    networks:
+      - internal
+    deploy:
+      resources:
+        limits:
+          memory: 50M
+        reservations:
+          memory: 25M
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget --spider http://192.168.1.187:8090 || exit 1
+      interval: 1m
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: tooling-homepage
+    environment:
+      PUID: 1000
+      PGID: 1000
+    ports:
+      - 3100:3000
+    volumes:
+      - /docker/homepage/app/config:/app/config # Make sure your local config directory exists
+      - /var/run/docker.sock:/var/run/docker.sock:ro # optional, for docker integrations
+    networks:
+      - internal
+    deploy:
+      resources:
+        limits:
+          memory: 500M
+        reservations:
+          memory: 250M
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget --spider http://192.168.1.187:3000 || exit 1
+      interval: 1m
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+networks:
+  internal:
+    driver: bridge
