@@ -52,6 +52,7 @@ services:
       - 7878:7878 # sonarr
       - 9696:9696 # prowlarr
       - 5055:5055 # overseer
+      - 8787:8787 # readarr
       - 8191:8191/tcp # flaresolverr listening port for selenium
     environment:
       - WHITELIST_DNS=192.168.1.1,1.1.1.1,8.8.8.8
@@ -190,6 +191,35 @@ services:
           memory: 250M
     labels:
       com.centurylinklabs.watchtower.enable: "true"
+  readarr:
+    image: lscr.io/linuxserver/readarr:develop
+    container_name: media-readarr
+    network_mode: service:expressvpn
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/London
+    volumes:
+      - /docker/readarr/config:/config
+      - /srv/dev-disk-by-uuid-D6E6E4A3E6E484D9/media/books:/books
+      - /srv/dev-disk-by-uuid-D6E6E4A3E6E484D9/DOCKER/transmission/downloads:/downloads
+    restart: unless-stopped
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    depends_on:
+      prowlarr:
+        condition: service_healthy
+    healthcheck:
+      test: curl --fail -s http://localhost:8787/ || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 500M
+        reservations:
+          memory: 250M
   overseer:
     container_name: media-overseer
     image: sctx/overseerr:latest
