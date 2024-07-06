@@ -77,9 +77,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 200M
+          memory: 500M
         reservations:
-          memory: 100M
+          memory: 250M
   flaresolverr:
     image: flaresolverr/flaresolverr:latest
     network_mode: service:expressvpn
