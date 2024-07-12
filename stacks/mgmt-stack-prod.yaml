@@ -3,7 +3,7 @@ services:
   dockge:
     image: louislam/dockge:1
     restart: unless-stopped
-    container_name: mgmt-dockge
+    container_name: dockge
     networks:
       - internal
     ports:
@@ -29,7 +29,7 @@ services:
       - internal
     ports:
       - 9000:9000
-    container_name: mgmt-portainer
+    container_name: portainer
     deploy:
       resources:
         limits:

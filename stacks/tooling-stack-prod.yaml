@@ -1,7 +1,7 @@
 version: "3.8"
 services:
   it-tools:
-    container_name: tooling-it-tools
+    container_name: it-tools
     restart: unless-stopped
     ports:
       - 8090:80
@@ -26,7 +26,7 @@ services:
       com.centurylinklabs.watchtower.enable: "true"
   homepage:
     image: ghcr.io/gethomepage/homepage:latest
-    container_name: tooling-homepage
+    container_name: homepage
     environment:
       PUID: 1000
       PGID: 1000
