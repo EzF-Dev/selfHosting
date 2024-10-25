@@ -1,0 +1,60 @@
+version: "3.8"
+services:
+  dockge:
+    image: louislam/dockge:1
+    restart: unless-stopped
+    container_name: dockge
+    networks:
+      - internal
+    ports:
+      # Host Port : Container Port
+      - 5001:5001
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data:/app/data
+      - /opt/stacks:/opt/stacks
+    environment:
+      # Tell Dockge where is your stacks directory
+      - DOCKGE_STACKS_DIR=/opt/stacks
+    deploy:
+      resources:
+        limits:
+          memory: 500M
+        reservations:
+          memory: 250M
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+  #-------------------------------------------------------------------------------------------------#
+  portainer-ce:
+    image: portainer/portainer-ce:alpine
+    networks:
+      - internal
+    ports:
+      - 5002:9000
+    container_name: portainer
+    deploy:
+      resources:
+        limits:
+          memory: 250M
+        reservations:
+          memory: 125M
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    healthcheck:
+      test: wget -q --no-verbose --tries=3 --spider
+        http://localhost:9000/api/system/status || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+#-------------------------------------------------------------------------------------------------#
+volumes:
+  portainer_data: {}
+#-------------------------------------------------------------------------------------------------#
+networks:
+  internal:
+    driver: bridge

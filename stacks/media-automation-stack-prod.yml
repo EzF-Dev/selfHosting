@@ -1,0 +1,264 @@
+version: "3.8"
+services:
+  expressvpn:
+    image: misioslav/expressvpn:latest-armhf-bullseye
+    container_name: expressvpn
+    restart: unless-stopped
+    networks:
+      - vpn_network
+    ports:
+      - 80:80
+      - 9091:9091
+      - 51413:51413
+      - 51413:51413/udp
+      - 8989:8989
+      - 7878:7878
+      - 9696:9696
+      - 5055:5055
+      - 8787:8787
+      - 8191:8191/tcp
+      - 9092:9092
+      - 6881:6881
+      - 6881:6881/udp
+    environment:
+      - WHITELIST_DNS=${WHITELIST_DNS}
+      - CODE=${EXPRESSVPN_CODE}
+      - SERVER=${EXPRESSVPN_SERVER}
+      - NETWORK=${EXPRESSVPN_NETWORK}
+      - PROTOCOL=${EXPRESSVPN_PROTOCOL}
+      - CIPHER=${EXPRESSVPN_CIPHER}
+      - AUTO_UPDATE=${EXPRESSVPN_AUTO_UPDATE}
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    stdin_open: true
+    tty: true
+    privileged: true
+    command: /bin/bash
+    volumes:
+      - /docker/express-vpn/check_ip.sh:/check_ip.sh
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - bash ./check_ip.sh
+      interval: 1m30s # Health check every 1.5 minutes
+      timeout: 10s # Check must complete in 10 seconds
+      retries: 3 # Fail after 3 consecutive failures
+      start_period: 10m # Wait 10 minutes before starting health checks
+  #-------------------------------------------------------------------------------------------------#
+  flaresolverr:
+    image: flaresolverr/flaresolverr:latest
+    network_mode: service:expressvpn
+    container_name: flaresolverr
+    environment:
+      - LOG_LEVEL=${FLARESOLVERR_LOG_LEVEL}
+      - LOG_HTML=${FLARESOLVERR_LOG_HTML}
+      - CAPTCHA_SOLVER=${FLARESOLVERR_CAPTCHA_SOLVER}
+      - TZ=${TZ}
+    depends_on:
+      expressvpn:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 700M
+        reservations:
+          memory: 350M
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - -f
+        - http://localhost:8191
+      interval: 1m30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+  #-------------------------------------------------------------------------------------------------#
+  prowlarr:
+    image: linuxserver/prowlarr:latest
+    network_mode: service:expressvpn
+    container_name: prowlarr
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - /docker/prowlarr/config:/config
+    restart: unless-stopped
+    depends_on:
+      expressvpn:
+        condition: service_healthy
+    healthcheck:
+      test: curl --fail -s http://localhost:9696/ || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 500M
+        reservations:
+          memory: 250M
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+  #-------------------------------------------------------------------------------------------------#
+  sonarr:
+    container_name: sonarr
+    image: linuxserver/sonarr:arm64v8-latest
+    restart: unless-stopped
+    network_mode: service:expressvpn
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - /docker/sonarr/config:/config
+      - disk here /media/tv:/tv
+      - disk here /downloads:/downloads
+    depends_on:
+      prowlarr:
+        condition: service_healthy
+    healthcheck:
+      test: curl --fail -s http://localhost:8989/ || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 500M
+        reservations:
+          memory: 250M
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+  #-------------------------------------------------------------------------------------------------#
+  radarr:
+    container_name: radarr
+    image: linuxserver/radarr:latest
+    restart: unless-stopped
+    network_mode: service:expressvpn
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - /docker/radarr/config:/config
+      - disk here /media/movies:/movies
+      - disk here /downloads:/downloads
+    depends_on:
+      prowlarr:
+        condition: service_healthy
+    healthcheck:
+      test: curl --fail -s http://localhost:7878/ || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 500M
+        reservations:
+          memory: 250M
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+  #-------------------------------------------------------------------------------------------------#
+  readarr:
+    image: lscr.io/linuxserver/readarr:develop
+    container_name: readarr
+    network_mode: service:expressvpn
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - /docker/readarr/config:/config
+      - disk here /media/books:/books
+      - disk here /downloads:/downloads
+    restart: unless-stopped
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    depends_on:
+      prowlarr:
+        condition: service_healthy
+    healthcheck:
+      test: curl --fail -s http://localhost:8787/ || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 500M
+        reservations:
+          memory: 250M
+  #-------------------------------------------------------------------------------------------------#
+  transmission:
+    image: linuxserver/transmission:latest
+    container_name: transmission
+    network_mode: service:expressvpn
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - /docker/transmission/config:/config
+      - disk here /downloads:/downloads
+      - disk here /transmission/watch:/watch
+    restart: unless-stopped
+    depends_on:
+      expressvpn:
+        condition: service_healthy
+    healthcheck:
+      test: curl --fail -s http://localhost:9091/transmission/web/ || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 500M
+        reservations:
+          memory: 250M
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+  #-------------------------------------------------------------------------------------------------#
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    network_mode: service:expressvpn
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+      - WEBUI_PORT=9092
+      - TORRENTING_PORT=6881
+    volumes:
+      - disk here /config:/config
+      - disk here /downloads:/downloads
+    restart: unless-stopped
+    depends_on:
+      expressvpn:
+        condition: service_healthy
+    healthcheck:
+      test: curl --fail -s http://localhost:9092/ || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 500M
+        reservations:
+          memory: 250M
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+networks:
+  vpn_network: null

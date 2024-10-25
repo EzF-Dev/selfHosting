@@ -1,0 +1,69 @@
+version: "3.8"
+services:
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: dozzle
+    ports:
+      - 5003:8080/tcp
+    networks:
+      - internal
+    environment:
+      - TZ=${TZ}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test:
+        - CMD
+        - /dozzle
+        - healthcheck
+      interval: 3s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 500M
+        reservations:
+          memory: 250M
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+  #-------------------------------------------------------------------------------------------------#
+  glances:
+    container_name: glances
+    restart: always
+    ports:
+      - 61208-61209:61208-61209
+    networks:
+      - internal
+    environment:
+      - GLANCES_OPT=-w
+      - TZ=${TZ}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /run/user/1000/podman/podman.sock:/run/user/1000/podman/podman.sock:ro
+      - disk here /:/nas
+    pid: host
+    image: nicolargo/glances:latest
+    deploy:
+      resources:
+        limits:
+          memory: 150M
+        reservations:
+          memory: 100M
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - -f
+        - http://localhost:61208
+      interval: 1m30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+#-------------------------------------------------------------------------------------------------#
+networks:
+  internal:
+    driver: bridge

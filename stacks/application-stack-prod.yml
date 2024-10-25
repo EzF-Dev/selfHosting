@@ -1,0 +1,60 @@
+version: "3.8"
+services:
+  it-tools:
+    container_name: it-tools
+    restart: unless-stopped
+    ports:
+      - 8001:80
+    environment:
+      - TZ=${TZ}
+    image: corentinth/it-tools:latest
+    networks:
+      - internal
+    deploy:
+      resources:
+        limits:
+          memory: 50M
+        reservations:
+          memory: 25M
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget --spider http://localhost:8001 || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+  #-------------------------------------------------------------------------------------------------#
+  hammond:
+    image: akhilrex/hammond
+    container_name: hammond
+    volumes:
+      - /docker/hammond/config:/config
+      - /docker/hammond/data:/assets
+    ports:
+      - 8002:3000
+    restart: unless-stopped
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    networks:
+      - internal
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget --spider http://localhost:8002 || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 200M
+        reservations:
+          memory: 50M
+#-------------------------------------------------------------------------------------------------#
+networks:
+  internal:
+    driver: bridge
