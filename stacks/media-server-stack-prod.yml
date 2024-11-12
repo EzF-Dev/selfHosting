@@ -11,10 +11,10 @@ services:
       - VERSION=${PLEX_VERSION}
       - PLEX_CLAIM=${PLEX_CLAIM}
     volumes:
-      - /docker/plex/config:/config
-      - disk here /media/tv:/tv
-      - disk here /media/movies:/movies
-      - disk here /media/music:/music
+      - ${DOCKER_VOLUME_ROOT}/plex/config:/config
+      - ${MEDIA_VOLUME_ROOT}/media/tv:/tv
+      - ${MEDIA_VOLUME_ROOT}/media/movies:/movies
+      - ${MEDIA_VOLUME_ROOT}/media/music:/music
     restart: unless-stopped
     deploy:
       resources:
@@ -35,7 +35,7 @@ services:
     container_name: tautulli
     restart: unless-stopped
     volumes:
-      - /docker/tautulli/config:/config
+      - ${DOCKER_VOLUME_ROOT}/tautulli/config:/config
     environment:
       - PUID=${PUID}
       - PGID=${PGID}

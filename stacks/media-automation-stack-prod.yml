@@ -40,7 +40,7 @@ services:
     privileged: true
     command: /bin/bash
     volumes:
-      - /docker/express-vpn/check_ip.sh:/check_ip.sh
+      - ${EXPRESSVPN_IP_CHECK_VOLUME}:/check_ip.sh
     healthcheck:
       test:
         - CMD-SHELL
@@ -91,7 +91,7 @@ services:
       - PGID=${PGID}
       - TZ=${TZ}
     volumes:
-      - /docker/prowlarr/config:/config
+      - ${DOCKER_VOLUME_ROOT}/prowlarr/config:/config
     restart: unless-stopped
     depends_on:
       expressvpn:
@@ -120,9 +120,9 @@ services:
       - PGID=${PGID}
       - TZ=${TZ}
     volumes:
-      - /docker/sonarr/config:/config
-      - disk here /media/tv:/tv
-      - disk here /downloads:/downloads
+      - ${DOCKER_VOLUME_ROOT}/sonarr/config:/config
+      - ${VOLUME_ROOT}/media/tv:/tv
+      - ${VOLUME_ROOT}/DOCKER/downloads:/downloads
     depends_on:
       prowlarr:
         condition: service_healthy
@@ -150,9 +150,9 @@ services:
       - PGID=${PGID}
       - TZ=${TZ}
     volumes:
-      - /docker/radarr/config:/config
-      - disk here /media/movies:/movies
-      - disk here /downloads:/downloads
+      - ${DOCKER_VOLUME_ROOT}/radarr/config:/config
+      - ${VOLUME_ROOT}/media/movies:/movies
+      - ${VOLUME_ROOT}/DOCKER/downloads:/downloads
     depends_on:
       prowlarr:
         condition: service_healthy
@@ -179,9 +179,9 @@ services:
       - PGID=${PGID}
       - TZ=${TZ}
     volumes:
-      - /docker/readarr/config:/config
-      - disk here /media/books:/books
-      - disk here /downloads:/downloads
+      - ${DOCKER_VOLUME_ROOT}/readarr/config:/config
+      - ${VOLUME_ROOT}/media/books:/books
+      - ${VOLUME_ROOT}/DOCKER/downloads:/downloads
     restart: unless-stopped
     labels:
       com.centurylinklabs.watchtower.enable: "true"
@@ -200,49 +200,19 @@ services:
         reservations:
           memory: 250M
   #-------------------------------------------------------------------------------------------------#
-  transmission:
-    image: linuxserver/transmission:latest
-    container_name: transmission
-    network_mode: service:expressvpn
-    environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
-    volumes:
-      - /docker/transmission/config:/config
-      - disk here /downloads:/downloads
-      - disk here /transmission/watch:/watch
-    restart: unless-stopped
-    depends_on:
-      expressvpn:
-        condition: service_healthy
-    healthcheck:
-      test: curl --fail -s http://localhost:9091/transmission/web/ || exit 1
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    deploy:
-      resources:
-        limits:
-          memory: 500M
-        reservations:
-          memory: 250M
-    labels:
-      com.centurylinklabs.watchtower.enable: "true"
-  #-------------------------------------------------------------------------------------------------#
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent:latest
     container_name: qbittorrent
     network_mode: service:expressvpn
     environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Etc/UTC
-      - WEBUI_PORT=9092
-      - TORRENTING_PORT=6881
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - WEBUI_PORT=${WEBUI_PORT}
+      - TORRENTING_PORT=${TORRENTING_PORT}
     volumes:
-      - disk here /config:/config
-      - disk here /downloads:/downloads
+      - ${DOCKER_VOLUME_ROOT}/qbittorrent/config:/config
+      - ${VOLUME_ROOT}/DOCKER/downloads:/downloads
     restart: unless-stopped
     depends_on:
       expressvpn:
